@@ -1,0 +1,294 @@
+# Task 7 – Vulnerability Scanning with Nikto
+
+## Overview
+
+For this task, I used **Nikto** to scan a locally hosted **DVWA (Damn Vulnerable Web Application)** for possible security issues.
+
+DVWA was used as the target because it is intentionally vulnerable and is useful for practising web security testing in a controlled environment.
+
+The main purpose of the task was to run a Nikto scan, look at what it reported, identify the risks, and suggest ways the issues could be fixed.
+
+---
+
+## Tools Used
+
+* Linux
+* Nikto v2.5.0
+* DVWA
+* GitHub
+* Web browser
+
+### Target
+
+```text
+http://127.0.0.1:4280
+```
+
+The DVWA server was running locally on port `4280`.
+
+---
+
+## Installing Nikto
+
+Nikto was installed on the Linux system before starting the scan.
+
+After installation, I checked that Nikto was working correctly before scanning DVWA.
+
+---
+
+## Running the Scan
+
+The first scan was performed using:
+
+```bash
+nikto -h http://127.0.0.1:4280
+```
+
+This allowed Nikto to check the DVWA web server for known issues, insecure configurations, information disclosure and other suspicious files or resources.
+
+The scan produced several findings.
+
+---
+
+## Saving the Results
+
+I also saved the scan results to a text file so that they could be reviewed later:
+
+```bash
+nikto -h http://127.0.0.1:4280 -o nikto_scan_results.txt
+```
+
+The file `nikto_scan_results.txt` contains the raw output from the scan.
+
+---
+
+## Main Findings
+
+Nikto reported a number of issues during the scan.
+
+### 1. PHP Version Disclosure
+
+Nikto found that the server was exposing:
+
+```text
+X-Powered-By: PHP/8.5.9
+```
+
+This tells anyone connecting to the server which version of PHP is being used.
+
+This is not necessarily a vulnerability by itself, but it gives an attacker extra information about the server.
+
+**Severity:** Low
+
+**Recommended fix:** Remove unnecessary version information from HTTP response headers and keep the software updated.
+
+---
+
+### 2. Missing X-Frame-Options Header
+
+Nikto reported that the `X-Frame-Options` header was missing.
+
+This can make a website more exposed to **clickjacking**, where a user can be tricked into interacting with a website through a malicious page.
+
+**Severity:** Medium
+
+**Recommended fix:** Configure an appropriate `X-Frame-Options` policy or use a suitable Content Security Policy.
+
+---
+
+### 3. Missing X-Content-Type-Options Header
+
+The scan also found that the `X-Content-Type-Options` header was not set.
+
+This can allow browsers to try to determine the type of content themselves instead of following the server's declared content type.
+
+**Severity:** Low
+
+**Recommended fix:**
+
+```text
+X-Content-Type-Options: nosniff
+```
+
+should be configured on the server.
+
+---
+
+### 4. System File Disclosure
+
+One of the more serious findings was:
+
+```text
+GET ///etc/hosts
+The server install allows reading of any system file by adding an extra '/' to the URL.
+```
+
+This suggests that specially formatted URLs may allow files outside the normal web directory to be accessed.
+
+If this was exploitable on a real server, an attacker could potentially read sensitive system or application files.
+
+**Severity:** High
+
+**Recommended fix:** Properly validate and normalise URL paths and make sure users cannot access files outside the intended web directory.
+
+---
+
+### 5. Admin Login Page
+
+Nikto found:
+
+```text
+/login.php
+```
+
+This indicates that an administrative login page is available.
+
+The existence of a login page is not automatically a vulnerability, but administrative login pages can be targeted by attackers trying to guess or steal credentials.
+
+**Severity:** Informational / Low
+
+**Recommended fix:** Use strong authentication, rate limiting and appropriate access controls.
+
+---
+
+### 6. PHP Backdoor/File Manager Findings
+
+Nikto identified several PHP files that matched known backdoor or file-manager signatures.
+
+Some of the reported paths included:
+
+```text
+/wp-content/themes/twentyeleven/images/headers/server.php
+/wordpress/wp-content/themes/twentyeleven/images/headers/server.php
+/wp-includes/Requests/Utility/content-post.php
+/wordpress/wp-includes/Requests/Utility/content-post.php
+/wp-includes/js/tinymce/themes/modern/Meuhy.php
+/wordpress/wp-includes/js/tinymce/themes/modern/Meuhy.php
+/assets/mobirise/css/meta.php
+```
+
+These findings are important because a real PHP backdoor could potentially allow unauthorised access to files or server functionality.
+
+However, Nikto uses signatures to identify these files, so the results should be checked manually before saying that every file is definitely a working backdoor.
+
+**Severity:** High/Critical if confirmed
+
+**Recommended fix:** Check the files manually, remove anything that is not legitimate, investigate how the files appeared, review server logs and keep applications updated.
+
+---
+
+### 7. D-Link Remote Command Execution Finding
+
+Nikto also reported:
+
+```text
+/login.cgi?cli=aa%20aa%27cat%20/etc/hosts
+Some D-Link router remote command execution.
+```
+
+This result needs to be treated carefully.
+
+The target used for this project was **DVWA running locally**, not a D-Link router. Because of this, the result may be a false positive caused by Nikto matching a known signature.
+
+I would therefore not classify this as a confirmed vulnerability without further testing.
+
+**Severity:** High if confirmed
+
+---
+
+### 8. Potential Web Shell
+
+Nikto reported:
+
+```text
+GET /shell?cat+/etc/hosts
+A backdoor was identified.
+```
+
+If this is a genuine web shell, it could potentially allow an attacker to execute commands through the web server.
+
+**Severity:** High/Critical if confirmed
+
+**Recommended fix:** Remove unauthorised shell files, investigate the source of the file, review logs and restrict unnecessary server-side execution.
+
+---
+
+## Severity Summary
+
+| Severity            | Findings                                                                   |
+| ------------------- | -------------------------------------------------------------------------- |
+| High / Critical     | Potential system-file disclosure, suspected backdoors, potential web shell |
+| Medium              | Missing X-Frame-Options                                                    |
+| Low                 | PHP version disclosure, missing X-Content-Type-Options                     |
+| Informational / Low | Admin login page                                                           |
+| Unverified          | D-Link command-execution signature                                         |
+
+The severity levels are based on the potential impact of the findings. Some results still need manual verification before they can be considered confirmed vulnerabilities.
+
+---
+
+## Nikto Limitations
+
+Nikto is useful, but it should not be treated as a complete penetration-testing tool.
+
+One of its main limitations is that it is a **noisy scanner**. It sends many requests to the web server while performing its checks. These requests can show up in server logs and can also be noticed by security monitoring systems.
+
+Nikto can also produce **false positives**. For example, the D-Link command-execution result did not necessarily mean that DVWA had a D-Link vulnerability. It was most likely a signature match that needs further investigation.
+
+Nikto also does not find every type of web application vulnerability. Manual testing and other security tools are still needed for a proper assessment.
+
+---
+
+## Nikto vs Nmap
+
+Nikto and Nmap are both security tools, but they are mainly used for different things.
+
+**Nikto** focuses on web servers. It looks for things such as:
+
+* Misconfigurations
+* Dangerous files
+* Information disclosure
+* Known web-server issues
+* Suspicious resources
+
+**Nmap** is mainly used for network discovery and scanning. It can be used to find:
+
+* Open ports
+* Running services
+* Service versions
+* Hosts on a network
+
+In simple terms:
+
+> **Nmap helps identify what is exposed on a network, while Nikto focuses on what may be wrong with a web server.**
+
+They can also be used together during a security assessment.
+
+---
+
+## OWASP Cross-Reference
+
+Some of the Nikto findings can be related to the OWASP Top 10.
+
+| Finding                      | Possible OWASP Category                                |
+| ---------------------------- | ------------------------------------------------------ |
+| Missing security headers     | A05 – Security Misconfiguration                        |
+| PHP version disclosure       | A05 – Security Misconfiguration                        |
+| Potential file disclosure    | A01 – Broken Access Control / A05                      |
+| Exposed admin login          | A05 – Security Misconfiguration                        |
+| Potential command execution  | A03 – Injection, if confirmed                          |
+| Vulnerable/outdated software | A06 – Vulnerable and Outdated Components, if confirmed |
+
+Not every Nikto finding fits directly into an OWASP category, so these mappings are only used as a general comparison.
+
+---
+
+## Conclusion
+
+This task gave me practical experience using Nikto to scan a web server and interpret the results.
+
+The scan identified several issues, including missing security headers, PHP version disclosure, possible system-file access and several suspicious PHP files.
+
+One of the main things I learned from the scan is that automated tools do not always give a definite answer. Some findings need to be checked manually before they can be considered real vulnerabilities.
+
+Using Nikto together with other tools such as Nmap can provide a better overall view of the security of a system.
